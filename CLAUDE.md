@@ -58,14 +58,6 @@ The build uses an **orchestrator + backend** architecture:
 - `lib/debian.sh` — Debian backend (phases 3, 4, 6, 7 distro-specific parts)
 - `lib/alpine.sh` — Alpine backend (phases 3, 4, 6, 7 distro-specific parts)
 
-Each backend implements a unified interface:
-- `backend_check_deps()` — Check host build dependencies
-- `backend_bootstrap()` — Phase 3: Bootstrap base system
-- `backend_configure()` — Phase 4: System configuration
-- `backend_install_landscape_services()` — Phase 5: Install init services (called by common)
-- `backend_install_docker()` — Phase 6: Install Docker
-- `backend_cleanup()` — Phase 7: Distro-specific cleanup (called by common)
-
 The 8 sequential phases:
 
 1. **Download** — Fetches `landscape-webserver-x86_64` binary and `static.zip` web assets from GitHub releases. Caches to `work/downloads/`.
@@ -79,95 +71,23 @@ The 8 sequential phases:
 
 ### Key Files
 
-- `build.sh` — Build orchestrator (arg parsing, sourcing backend, running phases)
 - `build.env` — Build configuration (version, image size, mirrors, format, passwords)
-- `lib/common.sh` — Shared build functions (download, disk image, landscape install, shrink, report)
-- `lib/debian.sh` — Debian backend (debootstrap, apt, systemd, initramfs-tools)
-- `lib/alpine.sh` — Alpine backend (apk, OpenRC, mkinitfs, gcompat)
-- `Makefile` — Development convenience targets (build, test with QEMU, SSH, cleanup)
-- `rootfs/` — Files copied into the image:
-  - `rootfs/etc/systemd/system/` — systemd service files (Debian)
-  - `rootfs/etc/init.d/` — OpenRC init scripts (Alpine)
-  - `rootfs/etc/sysctl.d/` — sysctl tuning
-  - `rootfs/usr/local/bin/expand-rootfs.sh` — Auto-expand root partition
-  - `rootfs/usr/local/bin/setup-mirror.sh` — Mirror switching tool (Chinese mirrors for apt/apk)
+- `rootfs/` — Files copied into the image (systemd units, OpenRC scripts, sysctl tuning, `expand-rootfs.sh`, `setup-mirror.sh`)
 - `configs/landscape_init.toml` — Optional router init config (WAN/LAN interfaces, DHCP, NAT rules)
-- `tests/test-auto.sh` — Automated test runner (QEMU lifecycle, SSH health checks, supports both systemd and OpenRC)
-- `tests/test-e2e.sh` — End-to-end network test (2-VM: Router + CirrOS client, tests DHCP/DNS/NAT)
-- `CHANGELOG.md` — Bilingual (EN/CN) changelog following Keep a Changelog format / 双语变更日志
-- `.github/workflows/ci.yml` — CI pipeline: 4-variant parallel build+test (health checks + E2E)
-- `.github/workflows/release.yml` — Release pipeline: build+test → compress → GitHub Release
-- `.github/workflows/test.yml` — Standalone test workflow (manual trigger, downloads artifacts)
-
-### Disk Image Layout (GPT, hybrid BIOS+UEFI)
-
-| Partition | Range | Type | Filesystem | Purpose |
-|-----------|-------|------|------------|---------|
-| 1 | 1-2 MiB | EF02 | none | BIOS boot (GRUB i386-pc) |
-| 2 | 2-202 MiB | EF00 | FAT32 | EFI System Partition |
-| 3 | 202 MiB+ | 8300 | ext4 (no journal) | Root filesystem |
-
-### Alpine-specific Notes
-
-- **glibc compatibility**: `landscape-webserver` is dynamically linked against glibc. Alpine uses musl libc, so `gcompat` provides a compatibility layer.
-- **Init system**: Alpine uses OpenRC instead of systemd. Service scripts are in `rootfs/etc/init.d/`.
-- **Kernel**: Alpine uses `linux-lts` (6.12+ with BTF/eBPF support).
-- **initramfs**: Alpine uses `mkinitfs` instead of `initramfs-tools`.
+- `tests/test-auto.sh` — Health check test runner (QEMU lifecycle, SSH checks, supports systemd and OpenRC)
+- `tests/test-e2e.sh` — E2E network test: two-VM topology (Router + CirrOS client), tests DHCP/DNS/NAT via SSH hop
+- `CHANGELOG.md` — Bilingual (EN/CN) changelog following Keep a Changelog format
 
 ### Image Size Reduction
 
-Both Debian and Alpine images are aggressively stripped in Phase 7 to minimize disk footprint.
-
-**Kernel modules removed** (common to both):
-- Top-level: `sound/`
-- `drivers/`: media, gpu, infiniband, iio, staging, hid, input, video, bluetooth, scsi, usb, platform, misc, crypto, nvme, and ~40 more subsystems. Only `net/`, `virtio/`, `block/`, `tty/`, `pci/`, and `hv/` are kept.
-- `drivers/net/`: wireless, can, wwan, arcnet, fddi, hamradio, ieee802154, wan, and others. Only virtio, phy, bonding, ppp, vxlan, wireguard, hyperv, and intel/realtek ethernet are kept.
-- `net/`: bluetooth, mac80211, wireless, sunrpc, ceph, tipc, nfc, and ~20 more. Only core, ipv4, ipv6, netfilter, bridge, sched, 8021q, tls, xfrm are kept.
-- `fs/`: bcachefs, btrfs, xfs, nfs, smb, ntfs3, squashfs, and ~30 more. Only ext4, jbd2, fat, nls, fuse, overlay are kept.
-
-**Alpine-specific reductions** (`lib/alpine.sh` `backend_cleanup`):
-- **bpftool dependency chain**: Alpine's bpftool pulls in perf → python3 (~31MB), binutils (~10MB). After build, perf/cpupower binaries, python3, binutils tools (ld, as, objdump, etc.), libslang are force-deleted while keeping the bpftool binary and its runtime libs.
-- **Boot files**: `System.map-*`, `config-*` removed; GRUB unicode fonts (2.4MB) removed; GRUB runtime utilities (`grub-mkrescue`, `grub-fstest`, etc.) removed; `/usr/share/grub` removed.
-
-**Debian-specific reductions** (`lib/debian.sh` `backend_cleanup`):
-- Initramfs rebuilt with `MODULES=dep` (only boot-required modules).
-- Locale/i18n: `libc-l10n` purged, non-English locales deleted, gconv charset converters trimmed to UTF-8/ASCII/ISO8859.
-- Build-only packages purged: `grub-efi-amd64`, `grub-pc-bin`, `grub-common`, `unzip`.
-
-**Common cleanup** (`lib/common.sh` `phase_cleanup_and_shrink`):
-- All binaries and `.so` files stripped with `--strip-unneeded`.
-- udev hardware database truncated.
-- `/usr/share/{doc,man,info,lintian,bash-completion,common-licenses}` removed.
-- GRUB locale and `/usr/lib/grub` removed.
-- ext4 filesystem resized to minimum, image truncated.
-
-### E2E Network Testing
-
-`tests/test-e2e.sh` runs a two-VM topology to test real routing functionality:
-
-```
-Router VM (eth0=WAN/SLIRP, eth1=LAN/mcast) ←→ Client VM (CirrOS, eth0=mcast)
-```
-
-- VMs are connected via QEMU `socket:mcast` backend (same L2 segment)
-- Router's DHCP server assigns 192.168.10.x to the client
-- Tests: DHCP assignment (via API), gateway ping, DNS resolution, NAT (client→internet via SSH hop)
-- Client interaction uses SSH ProxyCommand hop: host → router → CirrOS
-- Test logs saved to `output/test-logs/`
+Phase 7 aggressively strips the image: removes unused kernel modules (keeps only net/virtio/block/pci/tty/hv essentials), strips binaries, cleans caches, resizes ext4 to minimum. Details in cleanup functions of `lib/common.sh`, `lib/debian.sh`, `lib/alpine.sh`.
 
 ### CI/CD
 
-Each variant's build and test are merged into a single `build-and-test` job — 4 jobs run fully in parallel with no cross-waiting.
+All workflows run 4 variants in parallel: `default`, `docker`, `alpine`, `alpine-docker`.
 
-**ci.yml:**
-- **Triggers:** push to main (when build files change) or manual dispatch
-- **Jobs:** `build-and-test` × 4 matrix (`default`, `docker`, `alpine`, `alpine-docker`)
-- **Per job:** build → upload artifact → health checks (`test-auto.sh`) → E2E network tests (`test-e2e.sh`)
-
-**release.yml:**
-- **Triggers:** version tags (`v*`)
-- **Jobs:** `build-and-test` × 4 matrix → `release` (compress images, create GitHub Release)
-
-**test.yml:**
-- **Triggers:** manual dispatch (workflow_dispatch)
-- **Jobs:** `test` × 4 matrix (downloads artifacts from previous build, runs health checks + E2E)
+| Workflow | Trigger | Jobs |
+|----------|---------|------|
+| `ci.yml` | push to main (build files) / manual | build → health checks → E2E per variant |
+| `release.yml` | version tags (`v*`) | build+test → compress → GitHub Release |
+| `test.yml` | manual dispatch | download artifacts → health checks + E2E |
