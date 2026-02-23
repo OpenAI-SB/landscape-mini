@@ -17,7 +17,8 @@ on:
       - lib/**
       - rootfs/**
       - configs/**
-      - .github/workflows/**
+      - tests/**
+      - .github/workflows/ci.yml
 
 concurrency:
   group: ci-${{ github.ref }}
