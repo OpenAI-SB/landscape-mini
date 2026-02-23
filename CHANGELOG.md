@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- Narrow CI paths filter to only build/test-related files, avoid triggering on docs changes / 收窄 CI 路径过滤器，仅构建和测试相关文件变更才触发，避免文档修改触发构建
+- Skip CI when release commit to avoid duplicate workflows / Release 提交时跳过 CI，避免重复触发工作流
+
 ## [0.2.2] - 2026-02-23
 
 ### Changed / 变更
