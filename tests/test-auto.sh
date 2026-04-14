@@ -352,7 +352,7 @@ run_all_checks() {
     if detect_landscape_api_base; then
         local web_port="${API_BASE##*:}"
         run_check "Web UI listening on port ${web_port}" \
-            guest_run "curl -sf --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} ${API_BASE}/ -o /dev/null -k"
+            guest_run "curl -skI --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} ${API_BASE}/ -o /dev/null"
     else
         run_check "Web UI listening" false
     fi
