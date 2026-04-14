@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- Fix tagged release builds to keep using the upstream Landscape version from `build.env`, harden asset downloads, and make manual retest workflows restore build metadata from the correct path / 修复 tag 发布时错误使用仓库版本号替代上游 Landscape 版本的问题，加固资源下载校验，并修正手动复测 workflow 的 build metadata 路径
+
 ## [0.2.4] - 2026-04-14
 
 ### Changed / 变更

@@ -85,20 +85,39 @@ phase_download() {
     local bin_file="${DOWNLOAD_DIR}/${bin_name}"
     local static_url="${DOWNLOAD_BASE}/static.zip"
     local static_file="${DOWNLOAD_DIR}/static.zip"
+    local tmp_file=""
 
     if [[ -f "${bin_file}" ]]; then
         echo "  [OK] ${bin_name} already downloaded."
     else
         echo "  [DOWNLOADING] ${bin_name} ..."
-        curl -L -o "${bin_file}" "${bin_url}"
+        tmp_file="${bin_file}.part"
+        rm -f "${tmp_file}"
+        curl -fL --retry 3 --retry-delay 2 -o "${tmp_file}" "${bin_url}"
+        mv "${tmp_file}" "${bin_file}"
     fi
     chmod +x "${bin_file}"
 
     if [[ -f "${static_file}" ]]; then
-        echo "  [OK] static.zip already downloaded."
-    else
+        if unzip -tq "${static_file}" >/dev/null 2>&1; then
+            echo "  [OK] static.zip already downloaded."
+        else
+            echo "  [WARN] Cached static.zip is invalid, removing and re-downloading ..."
+            rm -f "${static_file}"
+        fi
+    fi
+
+    if [[ ! -f "${static_file}" ]]; then
         echo "  [DOWNLOADING] static.zip ..."
-        curl -L -o "${static_file}" "${static_url}"
+        tmp_file="${static_file}.part"
+        rm -f "${tmp_file}"
+        curl -fL --retry 3 --retry-delay 2 -o "${tmp_file}" "${static_url}"
+        if ! unzip -tq "${tmp_file}" >/dev/null 2>&1; then
+            rm -f "${tmp_file}"
+            echo "  [ERROR] Downloaded static.zip is not a valid zip archive. Check LANDSCAPE_VERSION / DOWNLOAD_BASE."
+            return 1
+        fi
+        mv "${tmp_file}" "${static_file}"
     fi
 
     echo "  Phase 1 complete."
@@ -175,6 +194,10 @@ phase_install_landscape() {
     # Copy and extract static web assets
     echo "  Installing static web assets ..."
     mkdir -p "${ROOTFS_DIR}/root/.landscape-router"
+    if ! unzip -tq "${DOWNLOAD_DIR}/static.zip" >/dev/null 2>&1; then
+        echo "  [ERROR] Cached static.zip is invalid. Re-run phase_download with a valid LANDSCAPE_VERSION."
+        return 1
+    fi
     cp "${DOWNLOAD_DIR}/static.zip" "${ROOTFS_DIR}/root/.landscape-router/static.zip"
     unzip -o "${ROOTFS_DIR}/root/.landscape-router/static.zip" -d "${ROOTFS_DIR}/root/.landscape-router/"
     rm -f "${ROOTFS_DIR}/root/.landscape-router/static.zip"

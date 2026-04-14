@@ -33,9 +33,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          resolved_version="${GITHUB_REF_NAME}"
+          release_tag="${GITHUB_REF_NAME}"
+          resolved_version="$(awk -F'"' '/^LANDSCAPE_VERSION=/{print $2; exit}' build.env)"
           artifact_id="${{ matrix.variant }}-${resolved_version}-${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
           {
+            echo "release_tag=$release_tag"
             echo "resolved_version=$resolved_version"
             echo "artifact_id=$artifact_id"
             echo "image_artifact=landscape-mini-x86-${artifact_id}"
@@ -82,6 +84,7 @@ jobs:
           image_base="$(basename "$image_file")"
           printf '%s\n' \
             "variant=${{ matrix.variant }}" \
+            "release_tag=${{ steps.meta.outputs.release_tag }}" \
             "resolved_version=${RESOLVED_VERSION}" \
             "artifact_id=${ARTIFACT_ID}" \
             "git_sha=${GITHUB_SHA}" \

@@ -82,11 +82,15 @@ jobs:
           set -euo pipefail
           mkdir -p output/test-logs
           resolved_version="${{ github.event.inputs.landscape_version }}"
-          if [ -f output/build-metadata.txt ]; then
-            cp output/build-metadata.txt output/test-logs/build-metadata.txt
+          metadata_path="output/metadata/build-metadata.txt"
+          if [ -f "$metadata_path" ]; then
+            cp "$metadata_path" output/test-logs/build-metadata.txt
             if [ -z "$resolved_version" ]; then
-              resolved_version="$(awk -F'=' '/^resolved_version=/{print $2; exit}' output/build-metadata.txt)"
+              resolved_version="$(awk -F'=' '/^resolved_version=/{print $2; exit}' "$metadata_path")"
             fi
+          fi
+          if [ -z "$resolved_version" ]; then
+            resolved_version="$(awk -F'"' '/^LANDSCAPE_VERSION=/{print $2; exit}' build.env)"
           fi
           echo "test_landscape_version=$resolved_version" >> "$GITHUB_ENV"
 
