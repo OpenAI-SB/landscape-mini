@@ -8,10 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-04-14
+
+### Changed / 变更
+
+- Sync with upstream Landscape v0.18.2 / 同步上游 Landscape v0.18.2
+
 ### Fixed / 修复
 
-- Narrow CI paths filter to only build/test-related files, avoid triggering on docs changes / 收窄 CI 路径过滤器，仅构建和测试相关文件变更才触发，避免文档修改触发构建
-- Skip CI when release commit to avoid duplicate workflows / Release 提交时跳过 CI，避免重复触发工作流
+- Improve build and test reliability to reduce false positives and stuck CI runs / 改进构建与测试可靠性，减少误报和卡死的 CI 任务
+- Validate CI on pull requests to `main` and make workflow conditions safer / 对发往 `main` 的 Pull Request 执行 CI 校验，并增强工作流条件判断的安全性
+- Relax Web UI and API readiness checks to better match runtime startup behavior / 放宽 Web UI 与 API 就绪探测，使其更贴近实际启动行为
+- Wait for Landscape API readiness before failing health checks, especially for Alpine Docker startup lag / 在健康检查失败前等待 Landscape API 就绪，降低 Alpine Docker 启动较慢导致的误判
 
 ## [0.2.2] - 2026-02-23
 
@@ -96,7 +104,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add concurrency group to prevent duplicate CI runs / 添加并发组以防止 CI 重复运行 (`ee11fe2`)
 - Add contents write permission for release job / 为发布任务添加内容写入权限 (`97b6240`)
 
-[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Cloud370/landscape-mini/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Cloud370/landscape-mini/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Cloud370/landscape-mini/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Cloud370/landscape-mini/compare/v0.1.2...v0.2.0
