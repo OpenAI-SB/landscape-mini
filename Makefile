@@ -62,9 +62,9 @@ deps: ## Install all host dependencies needed for building
 		grub-efi-amd64-bin grub-pc-bin qemu-utils qemu-system-x86 ovmf \
 		rsync curl gdisk unzip
 
-deps-test: ## Install test dependencies (sshpass, socat, curl)
+deps-test: ## Install test dependencies (sshpass, socat, curl, jq)
 	sudo apt-get update
-	sudo apt-get install -y sshpass socat curl qemu-system-x86 ovmf
+	sudo apt-get install -y sshpass socat curl jq qemu-system-x86 ovmf
 
 # --------------------------------------------------------------------------
 # Build targets — Debian
