@@ -56,8 +56,6 @@ jobs:
           expected_tuples=(
             "debian:false"
             "debian:true"
-            "alpine:false"
-            "alpine:true"
           )
           found=0
           seen_tuples=","
@@ -67,6 +65,7 @@ jobs:
             metadata="$dir/metadata/build-metadata.txt"
             config="$dir/metadata/effective-landscape_init.toml"
             image=("$dir"/*.img)
+            ova=("$dir"/*.ova)
             if [ ! -f "$metadata" ]; then
               echo "Missing build metadata in $dir" >&2
               exit 1
@@ -77,6 +76,10 @@ jobs:
             fi
             if [ ${#image[@]} -ne 1 ]; then
               echo "Expected exactly one raw image in $dir" >&2
+              exit 1
+            fi
+            if [ ${#ova[@]} -ne 1 ]; then
+              echo "Expected exactly one OVA in $dir" >&2
               exit 1
             fi
 
@@ -101,8 +104,12 @@ jobs:
               echo "Artifact $artifact_id resolved_version=$resolved_version, expected $expected_version" >&2
               exit 1
             fi
-            if [ -z "$output_formats" ] || [ -z "$produced_files" ]; then
-              echo "Artifact $artifact_id missing output_formats or produced_files" >&2
+            if [ "$output_formats" != "img,pve-ova" ]; then
+              echo "Artifact $artifact_id output_formats=$output_formats, expected img,pve-ova" >&2
+              exit 1
+            fi
+            if [[ "$produced_files" != *.img* || "$produced_files" != *.ova* ]]; then
+              echo "Artifact $artifact_id produced_files=$produced_files, expected img and ova outputs" >&2
               exit 1
             fi
 
@@ -110,8 +117,8 @@ jobs:
             seen_tuples+="${tuple},"
           done
 
-          if [ "$found" -ne 4 ]; then
-            echo "Expected 4 promoted artifacts, found $found" >&2
+          if [ "$found" -ne 2 ]; then
+            echo "Expected 2 promoted artifacts, found $found" >&2
             exit 1
           fi
 
@@ -152,7 +159,8 @@ jobs:
             echo "- Source CI run: ${{ steps.source.outputs.source_run_id }}"
             echo "- Source commit: ${{ steps.source.outputs.target_sha }}"
             echo "- Validation: promoted existing CI artifacts only; no rebuild performed"
-            echo "- Required tuple coverage: debian/alpine × include_docker true/false"
+            echo "- Required tuple coverage: debian × include_docker true/false"
+            echo "- Published files: .img.gz + .ova"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release
@@ -160,6 +168,5 @@ jobs:
         with:
           files: |
             artifacts/**/*.img.gz
-            artifacts/**/*.vmdk
             artifacts/**/*.ova
           generate_release_notes: true

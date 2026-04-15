@@ -13,10 +13,10 @@ on:
         required: false
         type: string
         default: "img"
-      run_e2e:
+      run_test:
         required: false
-        type: boolean
-        default: true
+        type: string
+        default: ""
       landscape_version:
         required: false
         type: string
@@ -69,6 +69,18 @@ on:
         required: false
         type: string
         default: "default"
+      release_channel:
+        required: false
+        type: string
+        default: "workflow"
+      release_tag:
+        required: false
+        type: string
+        default: ""
+      repository_owner:
+        required: false
+        type: string
+        default: ""
       image_retention_days:
         required: false
         type: number
@@ -77,6 +89,19 @@ on:
         required: false
         type: number
         default: 7
+    outputs:
+      resolved_version:
+        value: ${{ jobs.build-and-validate.outputs.resolved_version }}
+      build_name:
+        value: ${{ jobs.build-and-validate.outputs.build_name }}
+      artifact_tuple:
+        value: ${{ jobs.build-and-validate.outputs.artifact_tuple }}
+      artifact_id:
+        value: ${{ jobs.build-and-validate.outputs.artifact_id }}
+      image_artifact:
+        value: ${{ jobs.build-and-validate.outputs.image_artifact }}
+      log_artifact:
+        value: ${{ jobs.build-and-validate.outputs.log_artifact }}
 
 env:
   TEST_LOG_DIR: output/test-logs
@@ -85,6 +110,13 @@ jobs:
   build-and-validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    outputs:
+      resolved_version: ${{ steps.meta.outputs.resolved_version }}
+      build_name: ${{ steps.meta.outputs.build_name }}
+      artifact_tuple: ${{ steps.meta.outputs.artifact_tuple }}
+      artifact_id: ${{ steps.meta.outputs.artifact_id }}
+      image_artifact: ${{ steps.meta.outputs.image_artifact }}
+      log_artifact: ${{ steps.meta.outputs.log_artifact }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,6 +147,50 @@ jobs:
             echo "artifact_id=$artifact_id"
             echo "image_artifact=landscape-mini-x86-$artifact_id"
             echo "log_artifact=test-logs-$artifact_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Normalize requested tests
+        id: tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested="${{ inputs.run_test }}"
+          normalized="${requested,,}"
+          normalized="${normalized//[[:space:]]/}"
+
+          run_readiness=false
+          requested_dataplane=false
+          run_dataplane=false
+          dataplane_skip_reason=
+
+          case "$normalized" in
+            ""|none)
+              normalized=none
+              ;;
+            readiness)
+              run_readiness=true
+              ;;
+            readiness,dataplane)
+              run_readiness=true
+              requested_dataplane=true
+              if [ "${{ inputs.include_docker }}" = "true" ]; then
+                dataplane_skip_reason="Dataplane is only available for include_docker=false builds"
+              else
+                run_dataplane=true
+              fi
+              ;;
+            *)
+              echo "Unsupported run_test value: $requested" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "run_test=$normalized"
+            echo "run_readiness=$run_readiness"
+            echo "requested_dataplane=$requested_dataplane"
+            echo "run_dataplane=$run_dataplane"
+            echo "dataplane_skip_reason=$dataplane_skip_reason"
           } >> "$GITHUB_OUTPUT"
 
       - name: Render effective topology config
@@ -184,6 +260,10 @@ jobs:
           LANDSCAPE_ADMIN_USER_SOURCE: ${{ inputs.api_username_source }}
           LANDSCAPE_ADMIN_PASS: ${{ inputs.api_password }}
           LANDSCAPE_ADMIN_PASS_SOURCE: ${{ inputs.api_password_source }}
+          RUN_TEST: ${{ steps.tests.outputs.run_test }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPOSITORY_OWNER: ${{ inputs.repository_owner }}
         shell: bash
         run: |
           set -euo pipefail
@@ -211,6 +291,10 @@ jobs:
             LANDSCAPE_ADMIN_USER_SOURCE="${LANDSCAPE_ADMIN_USER_SOURCE}" \
             LANDSCAPE_ADMIN_PASS="${LANDSCAPE_ADMIN_PASS}" \
             LANDSCAPE_ADMIN_PASS_SOURCE="${LANDSCAPE_ADMIN_PASS_SOURCE}" \
+            RUN_TEST="none" \
+            RELEASE_CHANNEL="${RELEASE_CHANNEL}" \
+            RELEASE_TAG="${RELEASE_TAG}" \
+            REPOSITORY_OWNER="${REPOSITORY_OWNER}" \
             ./build.sh \
             "${version_flag[@]}" \
             --base-system "${{ inputs.base_system }}" \
@@ -225,6 +309,7 @@ jobs:
           RESOLVED_VERSION: ${{ steps.meta.outputs.resolved_version }}
           ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
           BUILD_NAME: ${{ steps.meta.outputs.build_name }}
+          RUN_TEST: ${{ steps.tests.outputs.run_test }}
         shell: bash
         run: |
           set -euo pipefail
@@ -242,6 +327,7 @@ jobs:
             "base_system=${{ inputs.base_system }}" \
             "include_docker=${{ inputs.include_docker }}" \
             "output_formats=${{ inputs.output_formats }}" \
+            "run_test=${RUN_TEST}" \
             "produced_files=${produced_files}" \
             "landscape_version=${landscape_version:-${RESOLVED_VERSION}}" \
             "resolved_version=${RESOLVED_VERSION}" \
@@ -254,10 +340,12 @@ jobs:
             "image_file=${image_file}" \
             "config_profile=${{ inputs.config_profile }}" \
             "topology_source=${{ inputs.topology_source }}" \
+            "release_channel=${{ inputs.release_channel }}" \
+            "release_tag=${{ inputs.release_tag }}" \
+            "repository_owner=${{ inputs.repository_owner }}" \
             "root_password_source=${{ inputs.root_password_source }}" \
             "api_username_source=${{ inputs.api_username_source }}" \
             "api_password_source=${{ inputs.api_password_source }}" \
-            "api_username=${{ inputs.api_username }}" \
             "resolved_apt_mirror=${resolved_apt_mirror:-unused}" \
             "resolved_apt_mirror_source=${resolved_apt_mirror_source:-unused}" \
             "resolved_alpine_mirror=${resolved_alpine_mirror:-unused}" \
@@ -266,9 +354,32 @@ jobs:
             "resolved_docker_apt_mirror_source=${resolved_docker_apt_mirror_source:-unused}" \
             "resolved_docker_apt_gpg_url=${resolved_docker_apt_gpg_url:-unused}" \
             "resolved_docker_apt_gpg_url_source=${resolved_docker_apt_gpg_url_source:-unused}" \
+            "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > output/metadata/build-metadata.txt
 
           cp output/metadata/build-metadata.txt "${TEST_LOG_DIR}/build-metadata.txt"
+
+      - name: Record test selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${TEST_LOG_DIR}"
+          printf '%s\n' \
+            "run_test=${{ steps.tests.outputs.run_test }}" \
+            "run_readiness=${{ steps.tests.outputs.run_readiness }}" \
+            "requested_dataplane=${{ steps.tests.outputs.requested_dataplane }}" \
+            "run_dataplane=${{ steps.tests.outputs.run_dataplane }}" \
+            "dataplane_skip_reason=${{ steps.tests.outputs.dataplane_skip_reason }}" \
+            > "${TEST_LOG_DIR}/test-selection.txt"
+
+          if [ "${{ steps.tests.outputs.requested_dataplane }}" = "true" ] && [ "${{ steps.tests.outputs.run_dataplane }}" != "true" ]; then
+            printf '%s\n' \
+              "base_system=${{ inputs.base_system }}" \
+              "include_docker=${{ inputs.include_docker }}" \
+              "run_test=${{ steps.tests.outputs.run_test }}" \
+              "reason=${{ steps.tests.outputs.dataplane_skip_reason }}" \
+              > "${TEST_LOG_DIR}/dataplane-skipped.txt"
+          fi
 
       - name: List outputs
         run: ls -lh output/
@@ -286,10 +397,13 @@ jobs:
           retention-days: ${{ inputs.image_retention_days }}
 
       - name: Run readiness checks (${{ inputs.base_system }}, docker=${{ inputs.include_docker }})
+        if: ${{ steps.tests.outputs.run_readiness == 'true' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ inputs.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ inputs.include_docker }}
           LANDSCAPE_TEST_OUTPUT_FORMATS: ${{ inputs.output_formats }}
+          LANDSCAPE_TEST_RUN_TEST: ${{ steps.tests.outputs.run_test }}
+          LANDSCAPE_TEST_RELEASE_CHANNEL: ${{ inputs.release_channel }}
           LANDSCAPE_TEST_ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
           LANDSCAPE_TEST_LANDSCAPE_VERSION: ${{ steps.meta.outputs.resolved_version }}
           LANDSCAPE_EFFECTIVE_INIT_CONFIG: output/metadata/effective-landscape_init.toml
@@ -299,11 +413,13 @@ jobs:
         run: timeout --foreground 20m ./tests/test-readiness.sh output/${{ steps.meta.outputs.build_name }}.img
 
       - name: Run dataplane tests (${{ inputs.base_system }}, docker=${{ inputs.include_docker }})
-        if: ${{ inputs.run_e2e }}
+        if: ${{ steps.tests.outputs.run_dataplane == 'true' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ inputs.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ inputs.include_docker }}
           LANDSCAPE_TEST_OUTPUT_FORMATS: ${{ inputs.output_formats }}
+          LANDSCAPE_TEST_RUN_TEST: ${{ steps.tests.outputs.run_test }}
+          LANDSCAPE_TEST_RELEASE_CHANNEL: ${{ inputs.release_channel }}
           LANDSCAPE_TEST_ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
           LANDSCAPE_TEST_LANDSCAPE_VERSION: ${{ steps.meta.outputs.resolved_version }}
           LANDSCAPE_EFFECTIVE_INIT_CONFIG: output/metadata/effective-landscape_init.toml
@@ -311,21 +427,6 @@ jobs:
           API_USERNAME: ${{ inputs.api_username }}
           API_PASSWORD: ${{ inputs.api_password }}
         run: timeout --foreground 25m ./tests/test-dataplane.sh output/${{ steps.meta.outputs.build_name }}.img
-
-      - name: Mark E2E not scheduled for this build identity
-        if: ${{ !inputs.run_e2e }}
-        env:
-          ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${TEST_LOG_DIR}"
-          printf '%s\n' \
-            "base_system=${{ inputs.base_system }}" \
-            "include_docker=${{ inputs.include_docker }}" \
-            "artifact_id=${ARTIFACT_ID}" \
-            "reason=E2E reserved for include_docker=false builds only" \
-            > "${TEST_LOG_DIR}/e2e-skipped.txt"
 
       - name: Upload validation logs
         if: always()

@@ -45,16 +45,15 @@ jobs:
         include:
           - base_system: debian
             include_docker: 'false'
+            run_test: readiness,dataplane
           - base_system: debian
             include_docker: 'true'
-          - base_system: alpine
-            include_docker: 'false'
-          - base_system: alpine
-            include_docker: 'true'
+            run_test: readiness
     uses: ./.github/workflows/_build-and-validate.yml
     with:
       base_system: ${{ matrix.base_system }}
       include_docker: ${{ matrix.include_docker }}
-      output_formats: img,vmdk,pve-ova
-      run_e2e: ${{ matrix.include_docker == 'false' }}
+      output_formats: img,pve-ova
+      run_test: ${{ matrix.run_test }}
       landscape_version: ${{ github.event.inputs.landscape_version || '' }}
+      release_channel: public-ci

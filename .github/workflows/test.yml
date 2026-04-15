@@ -35,10 +35,6 @@ jobs:
             include_docker: 'false'
           - base_system: debian
             include_docker: 'true'
-          - base_system: alpine
-            include_docker: 'false'
-          - base_system: alpine
-            include_docker: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -197,6 +193,7 @@ jobs:
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ matrix.include_docker }}
+          LANDSCAPE_TEST_RUN_TEST: ${{ matrix.include_docker == 'false' && 'readiness,dataplane' || 'readiness' }}
           LANDSCAPE_TEST_ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
           LANDSCAPE_TEST_LANDSCAPE_VERSION: ${{ env.test_landscape_version }}
           LANDSCAPE_EFFECTIVE_INIT_CONFIG: output/metadata/effective-landscape_init.toml
@@ -210,6 +207,7 @@ jobs:
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ matrix.include_docker }}
+          LANDSCAPE_TEST_RUN_TEST: readiness,dataplane
           LANDSCAPE_TEST_ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
           LANDSCAPE_TEST_LANDSCAPE_VERSION: ${{ env.test_landscape_version }}
           LANDSCAPE_EFFECTIVE_INIT_CONFIG: output/metadata/effective-landscape_init.toml
