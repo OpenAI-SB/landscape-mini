@@ -977,6 +977,12 @@ phase_cleanup_and_shrink() {
         echo "  Compressing raw image with gzip ..."
         gzip -k -f "${IMAGE_FILE}"
         echo "  Compressed: ${IMAGE_FILE}.gz"
+
+        if [[ -f "${VMDK_FILE}" ]]; then
+            echo "  Compressing VMDK image with gzip ..."
+            gzip -k -f "${VMDK_FILE}"
+            echo "  Compressed: ${VMDK_FILE}.gz"
+        fi
     fi
 
     write_local_build_metadata
@@ -1010,6 +1016,12 @@ phase_report() {
         local VMDK_SIZE
         VMDK_SIZE=$(du -h "${VMDK_FILE}" | awk '{print $1}')
         echo "  VMDK image: ${VMDK_FILE} (${VMDK_SIZE})"
+    fi
+
+    if [[ -f "${VMDK_FILE}.gz" ]]; then
+        local VMDK_GZ_SIZE
+        VMDK_GZ_SIZE=$(du -h "${VMDK_FILE}.gz" | awk '{print $1}')
+        echo "  Compressed: ${VMDK_FILE}.gz (${VMDK_GZ_SIZE})"
     fi
 
     if [[ -f "${PVE_OVA_FILE}" ]]; then
