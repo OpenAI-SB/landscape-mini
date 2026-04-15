@@ -204,6 +204,17 @@ jobs:
           mkdir -p output/metadata "${TEST_LOG_DIR}"
           image_file="$(ls output/*.img)"
           image_base="$(basename "$image_file")"
+          if [[ -f output/metadata/resolved-sources.env ]]; then
+            source output/metadata/resolved-sources.env
+          fi
+          resolved_apt_mirror="${resolved_apt_mirror:-unknown}"
+          resolved_apt_mirror_source="${resolved_apt_mirror_source:-unknown}"
+          resolved_alpine_mirror="${resolved_alpine_mirror:-unknown}"
+          resolved_alpine_mirror_source="${resolved_alpine_mirror_source:-unknown}"
+          resolved_docker_apt_mirror="${resolved_docker_apt_mirror:-unused}"
+          resolved_docker_apt_mirror_source="${resolved_docker_apt_mirror_source:-unused}"
+          resolved_docker_apt_gpg_url="${resolved_docker_apt_gpg_url:-unused}"
+          resolved_docker_apt_gpg_url_source="${resolved_docker_apt_gpg_url_source:-unused}"
           printf '%s\n' \
             "variant=${{ inputs.variant }}" \
             "resolved_version=${RESOLVED_VERSION}" \
@@ -218,6 +229,14 @@ jobs:
             "api_username_source=${{ inputs.api_username_source }}" \
             "api_password_source=${{ inputs.api_password_source }}" \
             "api_username=${{ inputs.api_username }}" \
+            "resolved_apt_mirror=${resolved_apt_mirror}" \
+            "resolved_apt_mirror_source=${resolved_apt_mirror_source}" \
+            "resolved_alpine_mirror=${resolved_alpine_mirror}" \
+            "resolved_alpine_mirror_source=${resolved_alpine_mirror_source}" \
+            "resolved_docker_apt_mirror=${resolved_docker_apt_mirror}" \
+            "resolved_docker_apt_mirror_source=${resolved_docker_apt_mirror_source}" \
+            "resolved_docker_apt_gpg_url=${resolved_docker_apt_gpg_url}" \
+            "resolved_docker_apt_gpg_url_source=${resolved_docker_apt_gpg_url_source}" \
             > output/metadata/build-metadata.txt
           cp output/metadata/build-metadata.txt "${TEST_LOG_DIR}/build-metadata.txt"
 

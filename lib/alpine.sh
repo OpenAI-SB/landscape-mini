@@ -44,7 +44,7 @@ backend_bootstrap() {
     if [[ ! -x "${APK_STATIC}" ]]; then
         echo "  Downloading apk-tools-static ..."
         mkdir -p "${APK_TOOLS_DIR}"
-        local APK_TOOLS_URL="${ALPINE_MIRROR}/${ALPINE_RELEASE}/main/x86_64"
+        local APK_TOOLS_URL="${RESOLVED_ALPINE_MIRROR}/${ALPINE_RELEASE}/main/x86_64"
         local APK_TOOLS_PKG
         APK_TOOLS_PKG=$(curl -fsSL --retry 3 --retry-delay 2 "${APK_TOOLS_URL}/" | grep -oP 'apk-tools-static-[0-9][^"]*\.apk' | head -1)
         if [[ -z "${APK_TOOLS_PKG}" ]]; then
@@ -62,8 +62,8 @@ backend_bootstrap() {
     # Bootstrap Alpine minimal root
     echo "  Running apk.static --initdb add alpine-base ..."
     mkdir -p "${ROOTFS_DIR}/etc/apk"
-    echo "${ALPINE_MIRROR}/${ALPINE_RELEASE}/main" > "${ROOTFS_DIR}/etc/apk/repositories"
-    echo "${ALPINE_MIRROR}/${ALPINE_RELEASE}/community" >> "${ROOTFS_DIR}/etc/apk/repositories"
+    echo "${RESOLVED_ALPINE_MIRROR}/${ALPINE_RELEASE}/main" > "${ROOTFS_DIR}/etc/apk/repositories"
+    echo "${RESOLVED_ALPINE_MIRROR}/${ALPINE_RELEASE}/community" >> "${ROOTFS_DIR}/etc/apk/repositories"
 
     retry_command 3 5 "${APK_STATIC}" \
         --root "${ROOTFS_DIR}" \
@@ -94,8 +94,8 @@ backend_configure() {
     # ---- APK repositories ----
     echo "  Writing /etc/apk/repositories ..."
     cat > "${ROOTFS_DIR}/etc/apk/repositories" <<EOF
-${ALPINE_MIRROR}/${ALPINE_RELEASE}/main
-${ALPINE_MIRROR}/${ALPINE_RELEASE}/community
+${RESOLVED_ALPINE_MIRROR}/${ALPINE_RELEASE}/main
+${RESOLVED_ALPINE_MIRROR}/${ALPINE_RELEASE}/community
 EOF
 
     # ---- Hostname ----
@@ -340,7 +340,7 @@ backend_install_docker() {
 
     echo ""
     echo "==== Phase 6: Installing Docker (Alpine) ===="
-    echo "  Docker packages follow ALPINE_MIRROR=${ALPINE_MIRROR}"
+    echo "  Docker packages follow ALPINE_MIRROR=${RESOLVED_ALPINE_MIRROR}"
 
     run_in_chroot_retry 3 5 "
         apk add docker docker-cli-compose docker-cli-buildx

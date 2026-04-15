@@ -140,10 +140,14 @@ setup-mirror.sh
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `APT_MIRROR` | `http://deb.debian.org/debian` | Debian 软件源地址 |
-| `ALPINE_MIRROR` | `https://dl-cdn.alpinelinux.org/alpine` | Alpine 软件源地址 |
-| `DOCKER_APT_MIRROR` | `https://download.docker.com/linux/debian` | Debian Docker APT 仓库地址 |
-| `DOCKER_APT_GPG_URL` | `${DOCKER_APT_MIRROR}/gpg` | Debian Docker APT GPG key 地址 |
+| `APT_MIRROR` | _(auto probe)_ | Debian 软件源显式覆盖；如果为空则从候选列表自动探测 |
+| `APT_MIRROR_CANDIDATES` | `deb.debian.org` + 常见公共镜像 | Debian 软件源候选列表（按空格分隔） |
+| `ALPINE_MIRROR` | _(auto probe)_ | Alpine 软件源显式覆盖；如果为空则从候选列表自动探测 |
+| `ALPINE_MIRROR_CANDIDATES` | `dl-cdn.alpinelinux.org` + 常见公共镜像 | Alpine 软件源候选列表（按空格分隔） |
+| `DOCKER_APT_MIRROR` | _(auto probe)_ | Debian Docker APT 仓库显式覆盖；如果为空则从候选列表自动探测 |
+| `DOCKER_APT_MIRROR_CANDIDATES` | Docker 官方 + 常见公共镜像 | Debian Docker APT 仓库候选列表（按空格分隔） |
+| `DOCKER_APT_GPG_URL` | _(auto probe)_ | Debian Docker APT GPG key 显式覆盖；如果为空则从候选列表自动探测 |
+| `DOCKER_APT_GPG_URL_CANDIDATES` | Docker 官方 + 常见公共镜像 | Debian Docker APT GPG key 候选列表（按空格分隔） |
 | `LANDSCAPE_VERSION` | `v0.18.2` | 上游 Landscape 版本号（或指定 tag） |
 | `LANDSCAPE_REPO` | `https://github.com/ThisSeanZhang/landscape` | 上游 Landscape 发布仓库 |
 | `OUTPUT_FORMAT` | `img` | 输出格式：`img`、`vmdk`、`both` |
@@ -173,9 +177,12 @@ setup-mirror.sh
 workflow 会把**凭据来源信息**按字段写入 `build-metadata.txt`（例如 `api_username_source` / `api_password_source`），同时会记录 `api_username` 的实际值，但不会把密码明文写入 artifact。网络拓扑的有效配置会随 artifact 一起携带为 `effective-landscape_init.toml`，供 `test.yml` 和 release promotion 校验使用。
 
 说明：
-- Debian 的 Docker 构建阶段使用 `DOCKER_APT_MIRROR` / `DOCKER_APT_GPG_URL`
-- Alpine 的 Docker 包仍然跟随 `ALPINE_MIRROR`，不额外引入单独 Docker 镜像变量
-- CI workflow 默认仍强制回退到官方上游源，避免环境漂移
+- 如果显式设置 `APT_MIRROR` / `ALPINE_MIRROR` / `DOCKER_APT_MIRROR` / `DOCKER_APT_GPG_URL`，构建会直接使用这些值
+- 如果显式变量为空，构建会从对应候选列表里探测多个备用源，优先选择健康且响应更快的源
+- 如果所有候选源都不可用，构建会在早期直接失败，不再等到后续安装阶段才报错
+- Debian 的 Docker 构建阶段使用解析后的 Docker APT mirror / GPG URL
+- Alpine 的 Docker 包仍然跟随解析后的 Alpine mirror，不额外引入单独 Docker 镜像变量
+- CI 与本地构建共享同一套探测逻辑，最终选中的源会写入 `build-metadata.txt`
 
 ## 磁盘分区布局
 

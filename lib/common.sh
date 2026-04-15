@@ -80,6 +80,97 @@ run_in_chroot_retry() {
 ${script}"
 }
 
+# ---------------------------------------------------------------------------
+# Helper: probe URL health and latency
+# ---------------------------------------------------------------------------
+probe_url() {
+    local url="$1"
+    local timeout_seconds="${2:-5}"
+    local output
+    local curl_exit=0
+    local http_code time_total
+
+    output=$(curl -fsSLo /dev/null \
+        --connect-timeout "${timeout_seconds}" \
+        --max-time "${timeout_seconds}" \
+        --write-out '%{http_code} %{time_total}' \
+        "$url" 2>/dev/null) || curl_exit=$?
+
+    if [[ "${curl_exit}" -ne 0 || -z "${output}" ]]; then
+        return 1
+    fi
+
+    read -r http_code time_total <<< "${output}"
+    if [[ "${http_code}" != "200" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "${time_total}"
+}
+
+# ---------------------------------------------------------------------------
+# Helper: select fastest healthy source from candidates
+# ---------------------------------------------------------------------------
+select_best_source() {
+    local source_name="$1"
+    local candidates="$2"
+    local probe_suffix="$3"
+    local timeout_seconds="${4:-5}"
+    local best_candidate=""
+    local best_time=""
+    local candidate probe_url_value measured_time
+
+    for candidate in ${candidates}; do
+        probe_url_value="${candidate%/}${probe_suffix}"
+        echo "  Probing ${source_name}: ${probe_url_value}" >&2
+        if measured_time=$(probe_url "${probe_url_value}" "${timeout_seconds}"); then
+            echo "  [OK] ${source_name}: ${candidate} (${measured_time}s)" >&2
+            if [[ -z "${best_candidate}" ]] || awk "BEGIN {exit !(${measured_time} < ${best_time})}"; then
+                best_candidate="${candidate}"
+                best_time="${measured_time}"
+            fi
+        else
+            echo "  [SKIP] ${source_name}: ${candidate}" >&2
+        fi
+    done
+
+    if [[ -z "${best_candidate}" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "${best_candidate}"
+}
+
+# ---------------------------------------------------------------------------
+# Helper: resolve explicit or probed source
+# ---------------------------------------------------------------------------
+resolve_source() {
+    local source_name="$1"
+    local explicit_value="$2"
+    local candidates="$3"
+    local probe_suffix="$4"
+    local resolved_var_name="$5"
+    local source_origin_var_name="$6"
+    local timeout_seconds="${7:-5}"
+    local resolved_value
+
+    if [[ -n "${explicit_value}" ]]; then
+        printf -v "${resolved_var_name}" '%s' "${explicit_value}"
+        printf -v "${source_origin_var_name}" '%s' "explicit"
+        echo "  Using explicit ${source_name}: ${explicit_value}"
+        return 0
+    fi
+
+    if ! resolved_value=$(select_best_source "${source_name}" "${candidates}" "${probe_suffix}" "${timeout_seconds}"); then
+        echo "ERROR: No healthy ${source_name} candidates found." >&2
+        return 1
+    fi
+
+    printf -v "${resolved_var_name}" '%s' "${resolved_value}"
+    printf -v "${source_origin_var_name}" '%s' "probed"
+    echo "  Selected ${source_name}: ${resolved_value}"
+}
+
 
 # ---------------------------------------------------------------------------
 # Helper: mount special filesystems for chroot

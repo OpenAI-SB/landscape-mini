@@ -309,18 +309,18 @@ backend_install_docker() {
     "
 
     # Add Docker GPG key
-    echo "  Adding Docker GPG key from ${DOCKER_APT_GPG_URL} ..."
+    echo "  Adding Docker GPG key from ${RESOLVED_DOCKER_APT_GPG_URL} ..."
     run_in_chroot_retry 3 5 "
-        curl -fsSL --retry 3 --retry-delay 2 '${DOCKER_APT_GPG_URL}' -o /etc/apt/keyrings/docker.asc
+        curl -fsSL --retry 3 --retry-delay 2 '${RESOLVED_DOCKER_APT_GPG_URL}' -o /etc/apt/keyrings/docker.asc
         chmod a+r /etc/apt/keyrings/docker.asc
     "
 
     # Add Docker repository
-    echo "  Adding Docker repository ${DOCKER_APT_MIRROR} ..."
+    echo "  Adding Docker repository ${RESOLVED_DOCKER_APT_MIRROR} ..."
     local ARCH
     ARCH=$(run_in_chroot "dpkg --print-architecture")
     run_in_chroot_retry 3 5 "
-        echo 'deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] ${DOCKER_APT_MIRROR} ${DEBIAN_RELEASE} stable' \
+        echo 'deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] ${RESOLVED_DOCKER_APT_MIRROR} ${DEBIAN_RELEASE} stable' \
             > /etc/apt/sources.list.d/docker.list
         apt-get \
             -o Acquire::Retries=3 \

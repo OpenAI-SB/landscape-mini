@@ -105,6 +105,7 @@ OUTPUT_DIR="$(pwd)/output"
 ROOTFS_DIR="${WORK_DIR}/rootfs"
 DOWNLOAD_DIR="${WORK_DIR}/downloads/${LANDSCAPE_VERSION}"
 LOOP_DEV=""
+SOURCE_PROBE_TIMEOUT="${SOURCE_PROBE_TIMEOUT:-5}"
 
 # Docker suffix
 IMAGE_SUFFIX=""
@@ -120,6 +121,83 @@ fi
 
 IMAGE_FILE="${OUTPUT_DIR}/landscape-mini-x86${BASE_SUFFIX}${IMAGE_SUFFIX}.img"
 
+resolve_build_sources() {
+    echo ""
+    echo "==== Source Resolution ===="
+
+    if [[ "${BASE_SYSTEM}" == "debian" ]]; then
+        resolve_source \
+            "Debian APT mirror" \
+            "${APT_MIRROR}" \
+            "${APT_MIRROR_CANDIDATES}" \
+            "/dists/${DEBIAN_RELEASE}/InRelease" \
+            "RESOLVED_APT_MIRROR" \
+            "RESOLVED_APT_MIRROR_SOURCE" \
+            "${SOURCE_PROBE_TIMEOUT}"
+        RESOLVED_ALPINE_MIRROR=""
+        RESOLVED_ALPINE_MIRROR_SOURCE="unused"
+    else
+        resolve_source \
+            "Alpine mirror" \
+            "${ALPINE_MIRROR}" \
+            "${ALPINE_MIRROR_CANDIDATES}" \
+            "/${ALPINE_RELEASE}/main/x86_64/APKINDEX.tar.gz" \
+            "RESOLVED_ALPINE_MIRROR" \
+            "RESOLVED_ALPINE_MIRROR_SOURCE" \
+            "${SOURCE_PROBE_TIMEOUT}"
+        RESOLVED_APT_MIRROR=""
+        RESOLVED_APT_MIRROR_SOURCE="unused"
+    fi
+
+    if [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "debian" ]]; then
+        resolve_source \
+            "Docker APT mirror" \
+            "${DOCKER_APT_MIRROR}" \
+            "${DOCKER_APT_MIRROR_CANDIDATES}" \
+            "/dists/${DEBIAN_RELEASE}/InRelease" \
+            "RESOLVED_DOCKER_APT_MIRROR" \
+            "RESOLVED_DOCKER_APT_MIRROR_SOURCE" \
+            "${SOURCE_PROBE_TIMEOUT}"
+
+        resolve_source \
+            "Docker APT GPG URL" \
+            "${DOCKER_APT_GPG_URL}" \
+            "${DOCKER_APT_GPG_URL_CANDIDATES}" \
+            "" \
+            "RESOLVED_DOCKER_APT_GPG_URL" \
+            "RESOLVED_DOCKER_APT_GPG_URL_SOURCE" \
+            "${SOURCE_PROBE_TIMEOUT}"
+    else
+        RESOLVED_DOCKER_APT_MIRROR=""
+        RESOLVED_DOCKER_APT_MIRROR_SOURCE="unused"
+        RESOLVED_DOCKER_APT_GPG_URL=""
+        RESOLVED_DOCKER_APT_GPG_URL_SOURCE="unused"
+    fi
+
+    if [[ "${BASE_SYSTEM}" == "alpine" ]]; then
+        MIRROR="${RESOLVED_ALPINE_MIRROR}"
+    else
+        MIRROR="${RESOLVED_APT_MIRROR}"
+    fi
+
+    DOCKER_MIRROR_DISPLAY="${RESOLVED_DOCKER_APT_MIRROR:-}"
+    DOCKER_GPG_DISPLAY="${RESOLVED_DOCKER_APT_GPG_URL:-}"
+
+    mkdir -p "${OUTPUT_DIR}/metadata"
+    printf '%s\n' \
+        "resolved_apt_mirror=${RESOLVED_APT_MIRROR}" \
+        "resolved_apt_mirror_source=${RESOLVED_APT_MIRROR_SOURCE}" \
+        "resolved_alpine_mirror=${RESOLVED_ALPINE_MIRROR}" \
+        "resolved_alpine_mirror_source=${RESOLVED_ALPINE_MIRROR_SOURCE}" \
+        "resolved_docker_apt_mirror=${RESOLVED_DOCKER_APT_MIRROR}" \
+        "resolved_docker_apt_mirror_source=${RESOLVED_DOCKER_APT_MIRROR_SOURCE}" \
+        "resolved_docker_apt_gpg_url=${RESOLVED_DOCKER_APT_GPG_URL}" \
+        "resolved_docker_apt_gpg_url_source=${RESOLVED_DOCKER_APT_GPG_URL_SOURCE}" \
+        > "${OUTPUT_DIR}/metadata/resolved-sources.env"
+
+    echo "  Source resolution complete."
+}
+
 # Determine download base URL
 if [ "${LANDSCAPE_VERSION}" == "latest" ]; then
     DOWNLOAD_BASE="${LANDSCAPE_REPO}/releases/latest/download"
@@ -127,15 +205,7 @@ else
     DOWNLOAD_BASE="${LANDSCAPE_REPO}/releases/download/${LANDSCAPE_VERSION}"
 fi
 
-# Mirror selection based on base system
-if [[ "${BASE_SYSTEM}" == "alpine" ]]; then
-    MIRROR="${ALPINE_MIRROR}"
-else
-    MIRROR="${APT_MIRROR}"
-fi
-
-DOCKER_MIRROR_DISPLAY="${DOCKER_APT_MIRROR}"
-DOCKER_GPG_DISPLAY="${DOCKER_APT_GPG_URL}"
+resolve_build_sources
 
 echo "============================================================"
 echo "  Landscape Mini - x86 UEFI Image Builder"
@@ -145,20 +215,18 @@ echo "  Landscape Version : ${LANDSCAPE_VERSION}"
 echo "  Download Source    : ${DOWNLOAD_BASE}"
 if [[ "${BASE_SYSTEM}" == "debian" ]]; then
     echo "  Debian Release    : ${DEBIAN_RELEASE}"
-    echo "  APT Mirror        : ${MIRROR}"
+    echo "  APT Mirror        : ${MIRROR} (${RESOLVED_APT_MIRROR_SOURCE})"
 else
     echo "  Alpine Release    : ${ALPINE_RELEASE}"
-    echo "  Alpine Mirror     : ${MIRROR}"
+    echo "  Alpine Mirror     : ${MIRROR} (${RESOLVED_ALPINE_MIRROR_SOURCE})"
 fi
 echo "  Image Size        : ${IMAGE_SIZE_MB} MB"
 echo "  Include Docker    : ${INCLUDE_DOCKER}"
 if [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "debian" ]]; then
-    echo "  Docker APT Mirror : ${DOCKER_MIRROR_DISPLAY}"
-    if [[ "${DOCKER_GPG_DISPLAY}" != "${DOCKER_MIRROR_DISPLAY}/gpg" ]]; then
-        echo "  Docker GPG URL    : ${DOCKER_GPG_DISPLAY}"
-    fi
+    echo "  Docker APT Mirror : ${DOCKER_MIRROR_DISPLAY} (${RESOLVED_DOCKER_APT_MIRROR_SOURCE})"
+    echo "  Docker GPG URL    : ${DOCKER_GPG_DISPLAY} (${RESOLVED_DOCKER_APT_GPG_URL_SOURCE})"
 elif [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "alpine" ]]; then
-    echo "  Docker Source     : Alpine packages via ${ALPINE_MIRROR}"
+    echo "  Docker Source     : Alpine packages via ${MIRROR} (${RESOLVED_ALPINE_MIRROR_SOURCE})"
 fi
 echo "  Output Format     : ${OUTPUT_FORMAT}"
 echo "  Compress Output   : ${COMPRESS_OUTPUT}"

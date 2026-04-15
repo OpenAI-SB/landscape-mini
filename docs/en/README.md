@@ -140,10 +140,14 @@ Edit `build.env` or override values with environment variables:
 
 | Variable | Default | Description |
 |------|--------|------|
-| `APT_MIRROR` | `http://deb.debian.org/debian` | Debian package mirror URL |
-| `ALPINE_MIRROR` | `https://dl-cdn.alpinelinux.org/alpine` | Alpine package mirror URL |
-| `DOCKER_APT_MIRROR` | `https://download.docker.com/linux/debian` | Debian Docker APT repository URL |
-| `DOCKER_APT_GPG_URL` | `${DOCKER_APT_MIRROR}/gpg` | Debian Docker APT GPG key URL |
+| `APT_MIRROR` | _(auto probe)_ | Explicit Debian package mirror override; if empty, probe candidate mirrors |
+| `APT_MIRROR_CANDIDATES` | `deb.debian.org` + common public mirrors | Debian package mirror candidates (space-separated) |
+| `ALPINE_MIRROR` | _(auto probe)_ | Explicit Alpine package mirror override; if empty, probe candidate mirrors |
+| `ALPINE_MIRROR_CANDIDATES` | `dl-cdn.alpinelinux.org` + common public mirrors | Alpine package mirror candidates (space-separated) |
+| `DOCKER_APT_MIRROR` | _(auto probe)_ | Explicit Debian Docker APT repository override; if empty, probe candidate repositories |
+| `DOCKER_APT_MIRROR_CANDIDATES` | Docker upstream + common public mirrors | Debian Docker APT repository candidates (space-separated) |
+| `DOCKER_APT_GPG_URL` | _(auto probe)_ | Explicit Debian Docker APT GPG URL override; if empty, probe candidate URLs |
+| `DOCKER_APT_GPG_URL_CANDIDATES` | Docker upstream + common public mirrors | Debian Docker APT GPG URL candidates (space-separated) |
 | `LANDSCAPE_VERSION` | `v0.18.2` | Upstream Landscape version (or specific tag) |
 | `LANDSCAPE_REPO` | `https://github.com/ThisSeanZhang/landscape` | Upstream Landscape release repository |
 | `OUTPUT_FORMAT` | `img` | Output format: `img`, `vmdk`, or `both` |
@@ -173,9 +177,12 @@ If you care about credential hygiene, store password-related values in GitHub Se
 The workflow records the **credential source** for each field in `build-metadata.txt` (for example, `api_username_source` and `api_password_source`). It also records the actual `api_username` value, but never writes plaintext passwords into artifacts. The effective network topology is bundled as `effective-landscape_init.toml` so `test.yml` and release promotion can validate it.
 
 Notes:
-- Debian Docker builds use `DOCKER_APT_MIRROR` and `DOCKER_APT_GPG_URL`
-- Alpine Docker packages still follow `ALPINE_MIRROR`, so no separate Alpine Docker mirror variable is needed
-- CI workflows still force official upstream defaults to avoid environment drift
+- If `APT_MIRROR` / `ALPINE_MIRROR` / `DOCKER_APT_MIRROR` / `DOCKER_APT_GPG_URL` are explicitly set, the build uses them directly
+- If the explicit variables are empty, the build probes the corresponding candidate lists and picks a healthy source, preferring faster healthy candidates
+- If all candidates fail, the build exits early before expensive install phases begin
+- Debian Docker builds use the resolved Docker APT mirror and GPG URL
+- Alpine Docker packages still follow the resolved Alpine mirror, so no separate Alpine Docker mirror variable is needed
+- Local builds and GitHub CI now share the same source resolution logic, and the resolved choices are written to `build-metadata.txt`
 
 ## Disk Partition Layout
 
