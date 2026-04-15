@@ -239,10 +239,10 @@ iface lo inet loopback
 EOF
 
     # ---- Build-time DNS resolver ----
-    configure_build_resolver()
+    configure_build_resolver
 
     # ---- Image default DNS resolver ----
-    configure_image_resolver()
+    configure_image_resolver
 
     echo "  Phase 4 complete."
 }
@@ -299,7 +299,7 @@ backend_install_docker() {
     echo "==== Phase 6: Installing Docker (Debian) ===="
 
     # ---- Build-time DNS resolver ----
-    configure_build_resolver()
+    configure_build_resolver
 
     # Install prerequisites
     run_in_chroot_retry 3 5 "
@@ -364,7 +364,7 @@ EOF
     run_in_chroot "systemctl enable docker.service"
 
     # ---- Image default DNS resolver ----
-    configure_image_resolver()
+    configure_image_resolver
 
     echo "  Phase 6 complete."
 }
