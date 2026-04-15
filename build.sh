@@ -8,31 +8,129 @@ set -euo pipefail
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_ENV_PROFILE="${BUILD_ENV_PROFILE:-}"
 
-# Source configuration
-if [[ -f "${SCRIPT_DIR}/build.env" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/build.env"
-else
-    echo "ERROR: build.env not found in ${SCRIPT_DIR}"
-    exit 1
-fi
+# Supported config variables whose explicit shell environment should override
+# layered env files such as build.env.<profile> and build.env.local.
+declare -a CONFIG_ENV_KEYS=(
+    BASE_SYSTEM
+    LANDSCAPE_VERSION
+    LANDSCAPE_REPO
+    DEBIAN_RELEASE
+    ALPINE_RELEASE
+    IMAGE_SIZE_MB
+    INCLUDE_DOCKER
+    ROOT_PASSWORD
+    LANDSCAPE_ADMIN_USER
+    LANDSCAPE_ADMIN_PASS
+    LANDSCAPE_LAN_SERVER_IP
+    LANDSCAPE_LAN_RANGE_START
+    LANDSCAPE_LAN_RANGE_END
+    LANDSCAPE_LAN_NETMASK
+    RUN_TEST
+    TIMEZONE
+    LOCALE
+    APT_MIRROR
+    APT_MIRROR_CANDIDATES
+    ALPINE_MIRROR
+    ALPINE_MIRROR_CANDIDATES
+    DOCKER_APT_MIRROR
+    DOCKER_APT_MIRROR_CANDIDATES
+    DOCKER_APT_GPG_URL
+    DOCKER_APT_GPG_URL_CANDIDATES
+    OUTPUT_FORMATS
+    COMPRESS_OUTPUT
+    EFFECTIVE_CONFIG_PATH
+    EFFECTIVE_CONFIG_PROFILE
+    EFFECTIVE_TOPOLOGY_SOURCE
+    ROOT_PASSWORD_SOURCE
+    LANDSCAPE_ADMIN_USER_SOURCE
+    LANDSCAPE_ADMIN_PASS_SOURCE
+    RELEASE_CHANNEL
+    RELEASE_TAG
+    REPOSITORY_OWNER
+    SOURCE_PROBE_TIMEOUT
+)
+declare -A EXPLICIT_ENV_VALUES=()
+declare -A EXPLICIT_ENV_IS_SET=()
+
+snapshot_explicit_config_env() {
+    local key
+    for key in "${CONFIG_ENV_KEYS[@]}"; do
+        if [[ -v ${key} ]]; then
+            EXPLICIT_ENV_IS_SET["${key}"]=1
+            EXPLICIT_ENV_VALUES["${key}"]="${!key}"
+        fi
+    done
+}
+
+restore_explicit_config_env() {
+    local key
+    for key in "${CONFIG_ENV_KEYS[@]}"; do
+        if [[ "${EXPLICIT_ENV_IS_SET[${key}]:-0}" == "1" ]]; then
+            printf -v "${key}" '%s' "${EXPLICIT_ENV_VALUES[${key}]}"
+            export "${key}"
+        fi
+    done
+}
+
+source_build_config_file() {
+    local file_path="$1"
+    # shellcheck disable=SC1090
+    source "${file_path}"
+}
+
+load_build_configuration() {
+    local default_file="${SCRIPT_DIR}/build.env"
+    local profile_file="${SCRIPT_DIR}/build.env.${BUILD_ENV_PROFILE}"
+    local local_file="${SCRIPT_DIR}/build.env.local"
+
+    if [[ ! -f "${default_file}" ]]; then
+        echo "ERROR: build.env not found in ${SCRIPT_DIR}" >&2
+        exit 1
+    fi
+
+    snapshot_explicit_config_env
+    source_build_config_file "${default_file}"
+
+    if [[ -n "${BUILD_ENV_PROFILE}" ]]; then
+        if [[ ! -f "${profile_file}" ]]; then
+            echo "ERROR: Requested profile file not found: ${profile_file}" >&2
+            exit 1
+        fi
+        source_build_config_file "${profile_file}"
+    fi
+
+    if [[ -f "${local_file}" ]]; then
+        source_build_config_file "${local_file}"
+    fi
+
+    restore_explicit_config_env
+}
+
+load_build_configuration
 
 # ---------------------------------------------------------------------------
 # Parse command line arguments
 # ---------------------------------------------------------------------------
 SKIP_TO_PHASE=0
 EFFECTIVE_CONFIG_PATH="${EFFECTIVE_CONFIG_PATH:-}"
-EFFECTIVE_CONFIG_PROFILE="${EFFECTIVE_CONFIG_PROFILE:-default}"
+EFFECTIVE_CONFIG_PROFILE="${EFFECTIVE_CONFIG_PROFILE:-${BUILD_ENV_PROFILE:-default}}"
 EFFECTIVE_TOPOLOGY_SOURCE="${EFFECTIVE_TOPOLOGY_SOURCE:-default}"
 ROOT_PASSWORD_SOURCE="${ROOT_PASSWORD_SOURCE:-default}"
 LANDSCAPE_ADMIN_USER="${LANDSCAPE_ADMIN_USER:-root}"
 LANDSCAPE_ADMIN_USER_SOURCE="${LANDSCAPE_ADMIN_USER_SOURCE:-default}"
 LANDSCAPE_ADMIN_PASS="${LANDSCAPE_ADMIN_PASS:-root}"
 LANDSCAPE_ADMIN_PASS_SOURCE="${LANDSCAPE_ADMIN_PASS_SOURCE:-default}"
+RUN_TEST="${RUN_TEST:-}"
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-local}"
+RELEASE_TAG="${RELEASE_TAG:-}"
+REPOSITORY_OWNER="${REPOSITORY_OWNER:-}"
 
 declare -a CLI_OUTPUT_FORMATS=()
 declare -a OUTPUT_FORMAT_LIST=()
+RUN_READINESS=false
+RUN_DATAPLANE=false
 
 action_usage() {
     cat <<'EOF'
@@ -45,6 +143,10 @@ Options:
   --output-format img|vmdk|pve-ova   (repeatable)
   --version VERSION
   --skip-to PHASE
+
+Environment layering:
+  build.env < build.env.<profile> < build.env.local < explicit env
+  Use BUILD_ENV_PROFILE=<name> to load build.env.<name>
 EOF
 }
 
@@ -128,6 +230,108 @@ normalize_output_formats() {
     OUTPUT_FORMATS="$(join_by , "${OUTPUT_FORMAT_LIST[@]}")"
 }
 
+normalize_run_test_selection() {
+    local selection="${RUN_TEST,,}"
+    selection="${selection//[[:space:]]/}"
+
+    case "${selection}" in
+        ""|none)
+            RUN_TEST="none"
+            RUN_READINESS=false
+            RUN_DATAPLANE=false
+            ;;
+        readiness)
+            RUN_TEST="readiness"
+            RUN_READINESS=true
+            RUN_DATAPLANE=false
+            ;;
+        readiness,dataplane)
+            RUN_TEST="readiness,dataplane"
+            RUN_READINESS=true
+            RUN_DATAPLANE=true
+            ;;
+        *)
+            echo "ERROR: RUN_TEST must be empty, 'none', 'readiness', or 'readiness,dataplane'; got '${RUN_TEST}'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+has_local_topology_inputs() {
+    [[ -n "${LANDSCAPE_LAN_SERVER_IP:-}" || -n "${LANDSCAPE_LAN_RANGE_START:-}" || -n "${LANDSCAPE_LAN_RANGE_END:-}" || -n "${LANDSCAPE_LAN_NETMASK:-}" ]]
+}
+
+prepare_effective_topology_config() {
+    if [[ -n "${EFFECTIVE_CONFIG_PATH}" ]]; then
+        if has_local_topology_inputs; then
+            echo "[WARN] EFFECTIVE_CONFIG_PATH is already set; ignoring LAN/DHCP env overrides." >&2
+        fi
+        return 0
+    fi
+
+    if ! has_local_topology_inputs; then
+        return 0
+    fi
+
+    mkdir -p "${OUTPUT_METADATA_DIR}"
+    bash "${SCRIPT_DIR}/.github/scripts/render-effective-topology.sh" "${OUTPUT_METADATA_DIR}/effective-landscape_init.toml"
+    EFFECTIVE_CONFIG_PATH="${OUTPUT_METADATA_DIR}/effective-landscape_init.toml"
+
+    if [[ "${EFFECTIVE_TOPOLOGY_SOURCE}" == "default" ]]; then
+        EFFECTIVE_TOPOLOGY_SOURCE="input"
+    fi
+
+    if [[ -z "${BUILD_ENV_PROFILE}" && "${EFFECTIVE_CONFIG_PROFILE}" == "default" ]]; then
+        EFFECTIVE_CONFIG_PROFILE="custom"
+    fi
+}
+
+write_local_test_skip_marker() {
+    local reason="$1"
+    mkdir -p "${OUTPUT_DIR}/test-logs"
+    cat > "${OUTPUT_DIR}/test-logs/dataplane-skipped.txt" <<EOF
+base_system=${BASE_SYSTEM}
+include_docker=${INCLUDE_DOCKER}
+run_test=${RUN_TEST}
+reason=${reason}
+EOF
+}
+
+run_local_post_build_tests() {
+    if [[ "${RUN_TEST}" == "none" ]]; then
+        return 0
+    fi
+
+    export LANDSCAPE_TEST_BASE_SYSTEM="${BASE_SYSTEM}"
+    export LANDSCAPE_TEST_INCLUDE_DOCKER="${INCLUDE_DOCKER}"
+    export LANDSCAPE_TEST_OUTPUT_FORMATS="${OUTPUT_FORMATS}"
+    export LANDSCAPE_TEST_RUN_TEST="${RUN_TEST}"
+    export LANDSCAPE_TEST_RELEASE_CHANNEL="${RELEASE_CHANNEL}"
+    export LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_VERSION}"
+    export LANDSCAPE_EFFECTIVE_INIT_CONFIG="${EFFECTIVE_CONFIG_PATH:-${OUTPUT_METADATA_DIR}/effective-landscape_init.toml}"
+    export SSH_PASSWORD="${ROOT_PASSWORD}"
+    export API_USERNAME="${LANDSCAPE_ADMIN_USER}"
+    export API_PASSWORD="${LANDSCAPE_ADMIN_PASS}"
+
+    if [[ "${RUN_READINESS}" == "true" ]]; then
+        echo ""
+        echo "==== Local Validation: readiness ===="
+        timeout --foreground 20m "${SCRIPT_DIR}/tests/test-readiness.sh" "${IMAGE_FILE}"
+    fi
+
+    if [[ "${RUN_DATAPLANE}" == "true" ]]; then
+        if [[ "${INCLUDE_DOCKER}" == "true" ]]; then
+            echo "[SKIP] Dataplane tests are not scheduled when INCLUDE_DOCKER=true." >&2
+            write_local_test_skip_marker "Dataplane is only available for include_docker=false builds"
+            return 0
+        fi
+
+        echo ""
+        echo "==== Local Validation: dataplane ===="
+        timeout --foreground 25m "${SCRIPT_DIR}/tests/test-dataplane.sh" "${IMAGE_FILE}"
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --base-system)
@@ -190,6 +394,7 @@ done
 validate_base_system "${BASE_SYSTEM}"
 validate_include_docker "${INCLUDE_DOCKER}"
 normalize_output_formats
+normalize_run_test_selection
 
 # ---------------------------------------------------------------------------
 # Must run as root
@@ -390,6 +595,7 @@ trap cleanup EXIT ERR
 
 main() {
     backend_check_deps
+    prepare_effective_topology_config
 
     if should_resolve_sources; then
         resolve_build_sources
@@ -423,6 +629,10 @@ main() {
     echo "  Compress Output   : ${COMPRESS_OUTPUT}"
     echo "  Config Profile    : ${EFFECTIVE_CONFIG_PROFILE}"
     echo "  Topology Source   : ${EFFECTIVE_TOPOLOGY_SOURCE}"
+    echo "  Run Test          : ${RUN_TEST}"
+    if [[ -n "${EFFECTIVE_CONFIG_PATH}" ]]; then
+        echo "  Effective Config  : ${EFFECTIVE_CONFIG_PATH}"
+    fi
     echo "  Admin User        : ${LANDSCAPE_ADMIN_USER}"
     echo "============================================================"
 
@@ -449,6 +659,7 @@ main() {
     [[ ${SKIP_TO_PHASE} -le 6 ]] && backend_install_docker
     [[ ${SKIP_TO_PHASE} -le 7 ]] && phase_cleanup_and_shrink
     phase_report
+    run_local_post_build_tests
 }
 
 main

@@ -395,6 +395,8 @@ load_landscape_topology() {
 LANDSCAPE_TEST_BASE_SYSTEM="${LANDSCAPE_TEST_BASE_SYSTEM:-}"
 LANDSCAPE_TEST_INCLUDE_DOCKER="${LANDSCAPE_TEST_INCLUDE_DOCKER:-}"
 LANDSCAPE_TEST_OUTPUT_FORMATS="${LANDSCAPE_TEST_OUTPUT_FORMATS:-}"
+LANDSCAPE_TEST_RUN_TEST="${LANDSCAPE_TEST_RUN_TEST:-}"
+LANDSCAPE_TEST_RELEASE_CHANNEL="${LANDSCAPE_TEST_RELEASE_CHANNEL:-}"
 
 load_build_metadata_from_image() {
     local image_path="$1"
@@ -419,7 +421,7 @@ landscape_load_test_identity() {
     local image_path="${1:-${LANDSCAPE_IMAGE_PATH:-}}"
     local metadata_path key value
 
-    if [[ -n "${LANDSCAPE_TEST_BASE_SYSTEM}" && -n "${LANDSCAPE_TEST_INCLUDE_DOCKER}" ]]; then
+    if [[ -n "${LANDSCAPE_TEST_BASE_SYSTEM}" && -n "${LANDSCAPE_TEST_INCLUDE_DOCKER}" && -n "${LANDSCAPE_TEST_OUTPUT_FORMATS}" && -n "${LANDSCAPE_TEST_RUN_TEST}" && -n "${LANDSCAPE_TEST_RELEASE_CHANNEL}" ]]; then
         return 0
     fi
 
@@ -439,6 +441,12 @@ landscape_load_test_identity() {
                 ;;
             output_formats)
                 LANDSCAPE_TEST_OUTPUT_FORMATS="${LANDSCAPE_TEST_OUTPUT_FORMATS:-${value}}"
+                ;;
+            run_test)
+                LANDSCAPE_TEST_RUN_TEST="${LANDSCAPE_TEST_RUN_TEST:-${value}}"
+                ;;
+            release_channel)
+                LANDSCAPE_TEST_RELEASE_CHANNEL="${LANDSCAPE_TEST_RELEASE_CHANNEL:-${value}}"
                 ;;
             artifact_id)
                 LANDSCAPE_TEST_ARTIFACT_ID="${LANDSCAPE_TEST_ARTIFACT_ID:-${value}}"
@@ -512,6 +520,8 @@ image_basename=${image_base}
 base_system=${LANDSCAPE_TEST_BASE_SYSTEM:-unknown}
 include_docker=${LANDSCAPE_TEST_INCLUDE_DOCKER:-unknown}
 output_formats=${LANDSCAPE_TEST_OUTPUT_FORMATS:-unknown}
+run_test=${LANDSCAPE_TEST_RUN_TEST:-unknown}
+release_channel=${LANDSCAPE_TEST_RELEASE_CHANNEL:-unknown}
 artifact_id=${LANDSCAPE_TEST_ARTIFACT_ID}
 landscape_version=${LANDSCAPE_TEST_LANDSCAPE_VERSION}
 git_sha=${LANDSCAPE_TEST_GIT_SHA}

@@ -34,7 +34,7 @@ API_USERNAME="${API_USERNAME:-root}"
 API_PASSWORD="${API_PASSWORD:-root}"
 SSH_TIMEOUT="${SSH_TIMEOUT:-120}"
 SHUTDOWN_TIMEOUT=15
-LANDSCAPE_TEST_NAME="health"
+LANDSCAPE_TEST_NAME="readiness"
 LANDSCAPE_IMAGE_PATH="${IMAGE_PATH}"
 
 resolve_default_landscape_version() {
@@ -90,7 +90,7 @@ preflight() {
     fi
 
     load_landscape_topology || exit 2
-    landscape_router_init_paths "health"
+    landscape_router_init_paths "readiness"
 
     landscape_load_test_identity "${IMAGE_PATH}" || true
     LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-$(resolve_default_landscape_version)}"

@@ -26,9 +26,11 @@
 # Configuration
 # --------------------------------------------------------------------------
 
-BASE_SYSTEM ?= debian
-INCLUDE_DOCKER ?= false
-OUTPUT_FORMATS ?= img
+empty :=
+space := $(empty) $(empty)
+comma := ,
+BUILD_ENV_VARS := BUILD_ENV_PROFILE BASE_SYSTEM INCLUDE_DOCKER OUTPUT_FORMATS LANDSCAPE_VERSION ROOT_PASSWORD LANDSCAPE_ADMIN_USER LANDSCAPE_ADMIN_PASS LANDSCAPE_LAN_SERVER_IP LANDSCAPE_LAN_RANGE_START LANDSCAPE_LAN_RANGE_END LANDSCAPE_LAN_NETMASK RUN_TEST EFFECTIVE_CONFIG_PATH EFFECTIVE_CONFIG_PROFILE EFFECTIVE_TOPOLOGY_SOURCE APT_MIRROR ALPINE_MIRROR DOCKER_APT_MIRROR DOCKER_APT_GPG_URL SOURCE_PROBE_TIMEOUT COMPRESS_OUTPUT LANDSCAPE_REPO IMAGE_SIZE_MB DEBIAN_RELEASE ALPINE_RELEASE TIMEZONE LOCALE
+BUILD_PRESERVE_ENV := $(subst $(space),$(comma),$(strip $(BUILD_ENV_VARS)))
 OVMF := /usr/share/ovmf/OVMF.fd
 SSH_PORT := 2222
 WEB_PORT := 9800
@@ -36,8 +38,18 @@ LANDSCAPE_CONTROL_PORT := 6443
 QEMU_MEM := 1024
 QEMU_SMP := 2
 
-IMAGE_BASENAME := landscape-mini-x86-$(BASE_SYSTEM)$(if $(filter true,$(INCLUDE_DOCKER)),-docker,)
+IMAGE_BASENAME := landscape-mini-x86-$(if $(BASE_SYSTEM),$(BASE_SYSTEM),debian)$(if $(filter true,$(INCLUDE_DOCKER)),-docker,)
 IMAGE := output/$(IMAGE_BASENAME).img
+
+resolve_image_path = $${IMAGE_PATH:-$$( \
+	if [ -f output/metadata/build-metadata.txt ]; then \
+		awk -F'=' '/^image_file=/{print "output/" $$2; exit}' output/metadata/build-metadata.txt; \
+	else \
+		printf '%s' "$(IMAGE)"; \
+	fi \
+)}
+
+$(foreach var,$(BUILD_ENV_VARS),$(if $(filter undefined,$(origin $(var))),,$(eval export $(var))))
 
 # --------------------------------------------------------------------------
 # Default target
@@ -52,9 +64,9 @@ help: ## Show all available targets with descriptions
 		| awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Current build identity:"
-	@echo "  BASE_SYSTEM=$(BASE_SYSTEM)"
-	@echo "  INCLUDE_DOCKER=$(INCLUDE_DOCKER)"
-	@echo "  OUTPUT_FORMATS=$(OUTPUT_FORMATS)"
+	@echo "  BASE_SYSTEM=$(if $(BASE_SYSTEM),$(BASE_SYSTEM),<from layered env files>)"
+	@echo "  INCLUDE_DOCKER=$(if $(INCLUDE_DOCKER),$(INCLUDE_DOCKER),<from layered env files>)"
+	@echo "  OUTPUT_FORMATS=$(if $(OUTPUT_FORMATS),$(OUTPUT_FORMATS),<from layered env files>)"
 	@echo "  IMAGE=$(IMAGE)"
 	@echo "  SSH:  ssh -p $(SSH_PORT) root@localhost"
 	@echo "  Web:  http://localhost:$(WEB_PORT)"
@@ -78,26 +90,29 @@ deps-test: ## Install test dependencies (sshpass, socat, curl, jq)
 # Build and test targets
 # --------------------------------------------------------------------------
 
-build: ## Build image with BASE_SYSTEM / INCLUDE_DOCKER / OUTPUT_FORMATS
-	sudo BASE_SYSTEM=$(BASE_SYSTEM) INCLUDE_DOCKER=$(INCLUDE_DOCKER) OUTPUT_FORMATS=$(OUTPUT_FORMATS) ./build.sh
+build: ## Build image with layered env files plus explicit overrides
+	sudo --preserve-env=$(BUILD_PRESERVE_ENV) ./build.sh
 
-test: $(IMAGE) ## Run readiness checks on the current raw image
-	./tests/test-readiness.sh $(IMAGE)
+test: ## Run readiness checks on the current raw image
+	@image_path="$(resolve_image_path)"; \
+	./tests/test-readiness.sh "$$image_path"
 
-test-dataplane: $(IMAGE) ## Run dataplane checks on the current raw image
-	./tests/test-dataplane.sh $(IMAGE)
+test-dataplane: ## Run dataplane checks on the current raw image
+	@image_path="$(resolve_image_path)"; \
+	./tests/test-dataplane.sh "$$image_path"
 
 # --------------------------------------------------------------------------
 # Interactive QEMU targets
 # --------------------------------------------------------------------------
 
-test-serial: $(IMAGE) ## Boot current image in QEMU (interactive serial console)
+test-serial: ## Boot current image in QEMU (interactive serial console)
+	@image_path="$(resolve_image_path)"; \
 	qemu-system-x86_64 \
 		-enable-kvm \
 		-m $(QEMU_MEM) \
 		-smp $(QEMU_SMP) \
 		-bios $(OVMF) \
-		-drive file=$(IMAGE),format=raw,if=virtio \
+		-drive file="$$image_path",format=raw,if=virtio \
 		-device virtio-net-pci,netdev=wan \
 		-netdev user,id=wan,hostfwd=tcp::$(SSH_PORT)-:22,hostfwd=tcp::$(WEB_PORT)-:$(LANDSCAPE_CONTROL_PORT) \
 		-device virtio-net-pci,netdev=lan \
@@ -105,13 +120,14 @@ test-serial: $(IMAGE) ## Boot current image in QEMU (interactive serial console)
 		-display none \
 		-serial mon:stdio
 
-test-gui: $(IMAGE) ## Boot current image in QEMU (with VGA display window)
+test-gui: ## Boot current image in QEMU (with VGA display window)
+	@image_path="$(resolve_image_path)"; \
 	qemu-system-x86_64 \
 		-enable-kvm \
 		-m $(QEMU_MEM) \
 		-smp $(QEMU_SMP) \
 		-bios $(OVMF) \
-		-drive file=$(IMAGE),format=raw,if=virtio \
+		-drive file="$$image_path",format=raw,if=virtio \
 		-device virtio-net-pci,netdev=wan \
 		-netdev user,id=wan,hostfwd=tcp::$(SSH_PORT)-:22,hostfwd=tcp::$(WEB_PORT)-:$(LANDSCAPE_CONTROL_PORT) \
 		-device virtio-net-pci,netdev=lan \

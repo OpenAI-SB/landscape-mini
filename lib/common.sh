@@ -421,12 +421,16 @@ write_local_build_metadata() {
 base_system=${BASE_SYSTEM}
 include_docker=${INCLUDE_DOCKER}
 output_formats=${OUTPUT_FORMATS}
+run_test=${RUN_TEST:-none}
 produced_files=${produced_files}
 landscape_version=${LANDSCAPE_VERSION}
 build_name=${BUILD_NAME}
 image_file=$(basename "${IMAGE_FILE}")
 config_profile=${EFFECTIVE_CONFIG_PROFILE}
 topology_source=${EFFECTIVE_TOPOLOGY_SOURCE}
+release_channel=${RELEASE_CHANNEL:-local}
+release_tag=${RELEASE_TAG:-}
+repository_owner=${REPOSITORY_OWNER:-}
 root_password_source=${ROOT_PASSWORD_SOURCE}
 api_username_source=${LANDSCAPE_ADMIN_USER_SOURCE}
 api_password_source=${LANDSCAPE_ADMIN_PASS_SOURCE}
