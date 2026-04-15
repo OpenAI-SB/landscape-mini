@@ -86,11 +86,8 @@ backend_configure() {
     # Mount bind filesystems for chroot
     mount_chroot_fs
 
-    # ---- DNS resolver (needed for apk to fetch packages) ----
-    echo "  Writing /etc/resolv.conf for package installation ..."
-    cat > "${ROOTFS_DIR}/etc/resolv.conf" <<'EOF'
-nameserver 1.1.1.1
-EOF
+    # ---- Build-time DNS resolver (needed for apk to fetch packages) ----
+    configure_build_resolver()
 
     # ---- APK repositories ----
     echo "  Writing /etc/apk/repositories ..."
@@ -276,10 +273,8 @@ auto eth0
 iface eth0 inet dhcp
 EOF
 
-    # ---- DNS resolver ----
-    echo "  Writing /etc/resolv.conf ..."
-    rm -f "${ROOTFS_DIR}/etc/resolv.conf"
-    echo "nameserver 1.1.1.1" > "${ROOTFS_DIR}/etc/resolv.conf"
+    # ---- Image default DNS resolver ----
+    configure_image_resolver()
 
     # ---- Enable serial console (for QEMU testing) ----
     echo "  Enabling serial console ..."
@@ -343,6 +338,9 @@ backend_install_docker() {
     echo "==== Phase 6: Installing Docker (Alpine) ===="
     echo "  Docker packages follow ALPINE_MIRROR=${RESOLVED_ALPINE_MIRROR}"
 
+    # ---- Build-time DNS resolver ----
+    configure_build_resolver()
+
     run_in_chroot_retry 3 5 "
         apk add docker docker-cli-compose docker-cli-buildx
     "
@@ -360,6 +358,9 @@ EOF
     # Enable Docker service
     echo "  Enabling Docker service ..."
     run_in_chroot "rc-update add docker default"
+
+    # ---- Image default DNS resolver ----
+    configure_image_resolver()
 
     echo "  Phase 6 complete."
 }

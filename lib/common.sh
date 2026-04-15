@@ -38,6 +38,29 @@ cleanup() {
 }
 
 # ---------------------------------------------------------------------------
+# Helper: prepare build-time DNS inside chroot
+# ---------------------------------------------------------------------------
+configure_build_resolver() {
+    echo "  Preparing build-time /etc/resolv.conf ..."
+    rm -f "${ROOTFS_DIR}/etc/resolv.conf"
+
+    if [[ -s /etc/resolv.conf ]]; then
+        cp /etc/resolv.conf "${ROOTFS_DIR}/etc/resolv.conf"
+    else
+        echo "nameserver 1.1.1.1" > "${ROOTFS_DIR}/etc/resolv.conf"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Helper: write image default DNS inside chroot
+# ---------------------------------------------------------------------------
+configure_image_resolver() {
+    echo "  Writing image /etc/resolv.conf ..."
+    rm -f "${ROOTFS_DIR}/etc/resolv.conf"
+    echo "nameserver 1.1.1.1" > "${ROOTFS_DIR}/etc/resolv.conf"
+}
+
+# ---------------------------------------------------------------------------
 # Helper: run a command inside the chroot
 # ---------------------------------------------------------------------------
 run_in_chroot() {

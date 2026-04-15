@@ -238,10 +238,11 @@ auto lo
 iface lo inet loopback
 EOF
 
-    # ---- DNS resolver ----
-    echo "  Writing /etc/resolv.conf ..."
-    rm -f "${ROOTFS_DIR}/etc/resolv.conf"
-    echo "nameserver 1.1.1.1" > "${ROOTFS_DIR}/etc/resolv.conf"
+    # ---- Build-time DNS resolver ----
+    configure_build_resolver()
+
+    # ---- Image default DNS resolver ----
+    configure_image_resolver()
 
     echo "  Phase 4 complete."
 }
@@ -296,6 +297,9 @@ backend_install_docker() {
 
     echo ""
     echo "==== Phase 6: Installing Docker (Debian) ===="
+
+    # ---- Build-time DNS resolver ----
+    configure_build_resolver()
 
     # Install prerequisites
     run_in_chroot_retry 3 5 "
@@ -358,6 +362,9 @@ EOF
     # Enable Docker service
     echo "  Enabling Docker service ..."
     run_in_chroot "systemctl enable docker.service"
+
+    # ---- Image default DNS resolver ----
+    configure_image_resolver()
 
     echo "  Phase 6 complete."
 }
