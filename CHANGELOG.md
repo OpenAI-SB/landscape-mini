@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed / 修复
 
+- Stop mirroring boot logs to VGA/VNC by making serial the primary boot console while keeping a final local login prompt for emergency access / 停止将启动日志镜像到 VGA/VNC，改为以串口作为主启动控制台，同时保留最终本地登录提示以便紧急接入
 - Stop hardcoding test SSH/API credentials so custom builds and retests can validate non-default passwords consistently / 移除测试中对 SSH/API 凭据的硬编码，使自定义构建与复测能够稳定验证非默认密码
 
 ## [0.2.6] - 2026-04-14
