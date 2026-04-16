@@ -5,6 +5,8 @@ This file currently tracks unreleased work and recent notable changes.
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-04-17
+
 ### Fixed / 修复
 
 - Run Alpine `expand-rootfs` from an OpenRC `local.d` hook instead of a regular service so first-boot root partition auto-expansion happens more reliably on slower virtualized environments like PVE / 将 Alpine 的 `expand-rootfs` 改为通过 OpenRC `local.d` 钩子运行，而不是普通服务，以提升其在 PVE 等较慢虚拟化环境下首次启动自动扩容的成功率
@@ -155,7 +157,8 @@ This file currently tracks unreleased work and recent notable changes.
 - Add concurrency group to prevent duplicate CI runs / 添加并发组以防止 CI 重复运行 (`ee11fe2`)
 - Add contents write permission for release job / 为发布任务添加内容写入权限 (`97b6240`)
 
-[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.8...HEAD
+[0.2.8]: https://github.com/Cloud370/landscape-mini/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/Cloud370/landscape-mini/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Cloud370/landscape-mini/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Cloud370/landscape-mini/compare/v0.2.4...v0.2.5
