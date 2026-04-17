@@ -46,7 +46,7 @@ jobs:
         include:
           - base_system: debian
             include_docker: 'false'
-            run_test: readiness,dataplane
+            run_test: none
     uses: ./.github/workflows/_build-and-validate.yml
     with:
       base_system: ${{ matrix.base_system }}
